@@ -17,81 +17,98 @@ client = OpenAI(
 )
 
 user_histories = {}
+user_modes = {}  # "cheap" atau "smart"
 
-# ================== WELCOME & MENU ==================
+# ================== MENU ==================
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    welcome_text = """👋 *Halo Iyud! Selamat datang di Grok V4.0*
+    bot.reply_to(message, """👋 *Halo Iyud! Grok V4.1 Hemat Credit*
 
-Aku siap bantu kamu 24/7!
-
-📸 Kirim foto + caption (atau tanpa caption)
-💬 Chat biasa
-🧹 `/clear` → hapus history obrolan
-❓ `/help` → lihat semua command
-
-Mau mulai? Ketik apa saja atau kirim foto! 🔥"""
-    bot.reply_to(message, welcome_text, parse_mode='Markdown')
+Mode sekarang: **Auto Hemat** (teks murah, foto pintar)
+Command baru:
+/cheap → pakai mode super irit
+/smart → pakai mode full pintar
+/help → bantuan lengkap""", parse_mode='Markdown')
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
-    help_text = """*Command yang tersedia:*
+    bot.reply_to(message, """*Command Hemat Credit:*
+/start - Welcome
+/help - Bantuan ini
+/clear - Hapus history
+/cheap - Mode super murah
+/smart - Mode full pintar (lebih bagus)
 
-/start - Mulai bot + welcome
-/help - Tampilkan bantuan ini
-/clear - Hapus semua history obrolan
+/mode - Cek mode sekarang
 
-Kirim foto atau teks bebas, aku akan jawab dengan memory + vision!
+Kirim teks atau foto bebas!""", parse_mode='Markdown')
 
-Bot ini selalu online 24/7 di Railway."""
-    bot.reply_to(message, help_text, parse_mode='Markdown')
+@bot.message_handler(commands=['cheap'])
+def set_cheap(message):
+    user_modes[message.chat.id] = "cheap"
+    bot.reply_to(message, "✅ Mode **Super Hemat** aktif! (grok-4-1-fast-reasoning)")
+
+@bot.message_handler(commands=['smart'])
+def set_smart(message):
+    user_modes[message.chat.id] = "smart"
+    bot.reply_to(message, "✅ Mode **Full Pintar** aktif! (grok-4.20-reasoning)")
+
+@bot.message_handler(commands=['mode'])
+def check_mode(message):
+    mode = user_modes.get(message.chat.id, "auto")
+    bot.reply_to(message, f"Mode sekarang: **{mode.upper()}**")
 
 @bot.message_handler(commands=['clear'])
 def clear_history(message):
     chat_id = message.chat.id
     user_histories[chat_id] = []
-    bot.reply_to(message, "✅ History obrolan sudah dihapus total!\nKita mulai dari nol lagi ya.")
+    bot.reply_to(message, "✅ History dihapus!")
 
-# ================== MAIN HANDLER (Teks + Foto) ==================
+# ================== MAIN HANDLER (AUTO HEMAT) ==================
 @bot.message_handler(content_types=['text', 'photo'])
 def handle_message(message):
     chat_id = message.chat.id
-
-    # Typing indicator (sedang mengetik...)
     bot.send_chat_action(chat_id, 'typing')
 
     if chat_id not in user_histories:
         user_histories[chat_id] = []
+    if chat_id not in user_modes:
+        user_modes[chat_id] = "auto"  # default auto hemat
 
     try:
+        # AUTO PILIH MODEL (hemat credit!)
+        if user_modes[chat_id] == "smart":
+            model = "grok-4.20-reasoning"
+        elif message.photo or user_modes[chat_id] == "auto":
+            model = "grok-4.20-reasoning" if message.photo else "grok-4-1-fast-reasoning"
+        else:
+            model = "grok-4-1-fast-reasoning"
+
         if message.photo:
-            # === VISION FOTO (Base64) ===
             photo = message.photo[-1]
             file_info = bot.get_file(photo.file_id)
             photo_bytes = bot.download_file(file_info.file_path)
             base64_image = base64.b64encode(photo_bytes).decode('utf-8')
             
-            caption = message.caption or "Deskripsikan gambar ini secara detail dan jawab apa yang kamu lihat."
+            caption = message.caption or "Deskripsikan gambar ini secara detail."
             content = [
                 {"type": "text", "text": caption},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}", "detail": "high"}}
             ]
             messages_to_send = user_histories[chat_id] + [{"role": "user", "content": content}]
-            bot.reply_to(message, "📸 Sedang menganalisis gambar...")
+            bot.reply_to(message, f"📸 Menganalisis foto dengan {model}...")
 
         else:
-            # === TEKS BIASA ===
             text = message.text.strip()
             messages_to_send = user_histories[chat_id] + [{"role": "user", "content": text}]
 
-        # Panggil Grok
         response = client.chat.completions.create(
-            model="grok-4.20-reasoning",
+            model=model,
             messages=messages_to_send
         )
         reply = response.choices[0].message.content
 
-        # Simpan ke memory
+        # Simpan history
         user_content = caption if message.photo else message.text
         user_histories[chat_id].append({"role": "user", "content": user_content})
         user_histories[chat_id].append({"role": "assistant", "content": reply})
@@ -102,9 +119,7 @@ def handle_message(message):
         bot.reply_to(message, reply)
 
     except Exception as e:
-        error_detail = traceback.format_exc()
-        print(f"ERROR: {str(e)}")
-        bot.reply_to(message, "❌ Maaf ada error kecil.\nCoba kirim lagi atau ketik /clear dulu.")
+        bot.reply_to(message, "❌ Error kecil, coba lagi atau ketik /cheap")
 
-print("✅ Bot Grok V4.0 FULL PRO (Menu + Typing + Vision) sudah nyala!")
+print("✅ Bot Grok V4.1 (Auto Hemat Credit) sudah nyala!")
 bot.infinity_polling()

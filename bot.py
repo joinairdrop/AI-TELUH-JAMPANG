@@ -16,47 +16,57 @@ client = OpenAI(
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, """👋 Halo! Grok Image Generator aktif.
+    bot.reply_to(message, """🖼️ **Grok Image Generator V6.1**
 
 Cara pakai:
-- Ketik deskripsi gambar yang kamu inginkan
-- Contoh: "gambar kucing lucu sedang main bola di jakarta malam hari, style anime"
-- Aku akan generate dan kirim gambar langsung ke sini.
+Ketik deskripsi gambar yang kamu mau, contoh:
+- "mobil sport merah di jalanan jakarta malam hari, realistic, detail tinggi"
+- "gadis anime rambut pink sedang minum kopi di kafe malam hari"
 
-Mau coba? Ketik saja deskripsinya! 🔥""")
+Aku akan generate dan kirim gambar langsung ke chat.
+
+Mau coba sekarang? Gas ketik deskripsinya! 🔥""")
 
 @bot.message_handler(func=lambda message: True)
 def generate_image(message):
     prompt = message.text.strip()
     
-    if len(prompt) < 5:
-        bot.reply_to(message, "Deskripsi terlalu pendek. Coba kasih deskripsi yang lebih detail ya.")
+    if len(prompt) < 10:
+        bot.reply_to(message, "Deskripsi terlalu pendek bro. Kasih detail lebih banyak ya.")
         return
 
     bot.send_chat_action(message.chat.id, 'upload_photo')
-    bot.reply_to(message, "🖼️ Sedang generate gambar... Mohon tunggu sebentar.")
+    msg = bot.reply_to(message, "🖼️ Sedang generate gambar dengan Grok... Tunggu sebentar.")
 
     try:
         response = client.images.generate(
-            model="grok-2-image",           # Model image generation dari xAI
+            model="grok-imagine-image",     # Model image resmi xAI saat ini
             prompt=prompt,
-            n=1,                            # generate 1 gambar
-            size="1024x1024",               # ukuran standar
-            quality="standard"
+            n=1,
+            size="1024x1024"
+            # quality dihapus karena error
         )
 
         image_url = response.data[0].url
 
-        # Kirim gambar langsung ke Telegram (bukan link)
+        # Kirim gambar langsung ke Telegram
         bot.send_photo(
             chat_id=message.chat.id,
             photo=image_url,
-            caption=f"✅ Gambar berhasil dibuat!\n\nPrompt: {prompt}",
+            caption=f"✅ Berhasil dibuat dengan Grok!\n\nPrompt: {prompt[:200]}...",
             reply_to_message_id=message.message_id
         )
 
-    except Exception as e:
-        bot.reply_to(message, f"❌ Gagal generate gambar.\nError: {str(e)[:200]}")
+        # Hapus pesan "sedang generate"
+        bot.delete_message(message.chat.id, msg.message_id)
 
-print("✅ Bot Grok V6.0 (Image Generator) sudah nyala!")
+    except Exception as e:
+        error_str = str(e)
+        bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=msg.message_id,
+            text=f"❌ Gagal generate gambar.\n\nError: {error_str[:300]}"
+        )
+
+print("✅ Bot Grok V6.1 (Image Generator Fixed) sudah nyala!")
 bot.infinity_polling()

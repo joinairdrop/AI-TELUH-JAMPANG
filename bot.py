@@ -2,6 +2,8 @@ import telebot
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
+import base64
+import traceback
 
 load_dotenv()
 
@@ -14,64 +16,62 @@ client = OpenAI(
     base_url="https://api.x.ai/v1"
 )
 
-# MEMORY CHAT (teks saja, biar ringan)
 user_histories = {}
 
 @bot.message_handler(content_types=['text', 'photo'])
 def handle_message(message):
     chat_id = message.chat.id
 
-    # Command clear
     if message.text == "/clear":
         user_histories[chat_id] = []
-        bot.reply_to(message, "✅ History dihapus! Mulai baru ya.")
+        bot.reply_to(message, "✅ History dihapus!")
         return
 
-    # Siapkan history teks
     if chat_id not in user_histories:
         user_histories[chat_id] = []
 
     try:
         if message.photo:
-            # === HANDLE FOTO ===
-            photo = message.photo[-1]  # foto ukuran terbesar
-            file_url = bot.get_file_url(photo.file_id)
-            caption = message.caption or "Deskripsikan gambar ini secara detail dan jawab apa yang kamu lihat."
+            # === FIX VISION PAKAI BASE64 ===
+            photo = message.photo[-1]
+            file_info = bot.get_file(photo.file_id)
+            photo_bytes = bot.download_file(file_info.file_path)
+            base64_image = base64.b64encode(photo_bytes).decode('utf-8')
+            
+            caption = message.caption or "Deskripsikan gambar ini secara detail."
 
-            current_message = [
+            content = [
                 {"type": "text", "text": caption},
-                {"type": "image_url", "image_url": {"url": file_url, "detail": "high"}}
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}", "detail": "high"}}
             ]
-            
-            messages_to_send = user_histories[chat_id] + [{"role": "user", "content": current_message}]
-            
+
+            messages_to_send = user_histories[chat_id] + [{"role": "user", "content": content}]
             bot.reply_to(message, "📸 Sedang menganalisis gambar...")
 
         else:
-            # === HANDLE TEKS BIASA ===
+            # Teks biasa
             text = message.text.strip()
-            current_message = text
-            messages_to_send = user_histories[chat_id] + [{"role": "user", "content": current_message}]
+            messages_to_send = user_histories[chat_id] + [{"role": "user", "content": text}]
 
-        # Kirim ke Grok (support vision + text)
         response = client.chat.completions.create(
             model="grok-4.20-reasoning",
             messages=messages_to_send
         )
         reply = response.choices[0].message.content
 
-        # Simpan reply ke memory (teks saja)
-        user_histories[chat_id].append({"role": "user", "content": current_message if isinstance(current_message, str) else caption})
+        # Simpan ke history (hanya teks supaya ringan)
+        user_histories[chat_id].append({"role": "user", "content": caption if message.photo else message.text})
         user_histories[chat_id].append({"role": "assistant", "content": reply})
 
-        # Batasi memory (20 pesan)
         if len(user_histories[chat_id]) > 20:
             user_histories[chat_id] = user_histories[chat_id][-20:]
 
         bot.reply_to(message, reply)
 
     except Exception as e:
-        bot.reply_to(message, "❌ Error kecil, coba kirim lagi ya.")
+        error_detail = traceback.format_exc()
+        print(f"❌ ERROR VISION: {str(e)}\n{error_detail}")  # Ini akan keliatan di Railway Logs!
+        bot.reply_to(message, f"❌ Error: {str(e)}\nCoba kirim foto lagi ya bro.")
 
-print("✅ Bot Grok V3.1 (Memory + Vision Foto) sudah nyala!")
+print("✅ Bot Grok V3.2 (Vision Fix + Base64) sudah nyala!")
 bot.infinity_polling()

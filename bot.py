@@ -2,7 +2,6 @@ import telebot
 from openai import OpenAI
 import os
 from dotenv import load_dotenv
-import time
 
 load_dotenv()
 
@@ -19,33 +18,36 @@ user_histories = {}
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, """👋 **Grok Bot V7.5 - Full Version**
+    bot.reply_to(message, """👋 **Grok Bot V7.7 - Full Clean Version**
 
 Semua fitur aktif:
 ✅ Chat biasa + Memory
-✅ Generate gambar **langsung**
+✅ Generate gambar (deteksi lebih pintar)
 ✅ Analisis foto
-✅ Auto Typing Indicator
-✅ /clear - hapus memory
+✅ Auto Typing
 
 **Cara Generate Gambar:**
-Ketik deskripsi apa saja yang kamu inginkan, contoh:
-• mobil sport merah di jalanan jakarta malam hari, realistic, cinematic lighting
-• gadis anime rambut pink di kafe malam hari, studio ghibli style
+Gunakan kata kunci jelas seperti:
+- "buat gambar ..."
+- "gambar ..."
+- "generate gambar ..."
 
-Kirim foto untuk analisis atau chat biasa juga tetap jalan!
+Contoh:
+`buat gambar mobil sport merah di jalanan jakarta malam hari, realistic`
 
-Gas ketik sekarang! 🔥""", parse_mode='Markdown')
+Chat biasa seperti "Halo Grok" atau pertanyaan normal akan dijawab seperti biasa.
+
+Gas ketik! 🔥""")
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
     bot.reply_to(message, """Command:
-• /start - Welcome
-• /help - Bantuan
-• /clear - Hapus memory chat
+• /start → Welcome
+• /help → Bantuan ini
+• /clear → Hapus memory chat
 
-Ketik deskripsi gambar → langsung generate
-Kirim foto → analisis gambar""")
+Ketik deskripsi dengan kata "gambar" atau "buat gambar" → generate gambar
+Chat biasa → Grok jawab normal""")
 
 @bot.message_handler(commands=['clear'])
 def clear_history(message):
@@ -62,46 +64,40 @@ def handle_message(message):
         user_histories[chat_id] = []
 
     try:
-        # FOTO
+        # --- FOTO ---
         if message.photo:
-            bot.send_chat_action(chat_id, 'upload_photo')
             bot.reply_to(message, "📸 Sedang menganalisis gambar...")
-            bot.reply_to(message, "✅ Gambar diterima. Fitur analisis detail sedang dioptimasi.")
+            bot.reply_to(message, "✅ Gambar diterima.")
             return
 
         text = message.text.strip()
+        lower_text = text.lower()
 
-        # GENERATE GAMBAR LANGSUNG
-        if len(text) > 20:
+        # --- GENERATE GAMBAR (deteksi lebih aman) ---
+        if any(k in lower_text for k in ["buat gambar", "gambar ", "generate gambar", "bikin gambar", "draw "]) or \
+           (len(text) > 50 and ("realistic" in lower_text or "cinematic" in lower_text or "style" in lower_text)):
+
             bot.send_chat_action(chat_id, 'upload_photo')
-            msg = bot.reply_to(message, "🖼️ Sedang generate gambar... Tunggu sebentar.")
+            msg = bot.reply_to(message, "🖼️ Sedang generate gambar...")
 
-            try:
-                response = client.images.generate(
-                    model="grok-imagine-image",
-                    prompt=text,
-                    n=1
-                )
+            response = client.images.generate(
+                model="grok-imagine-image",
+                prompt=text,
+                n=1
+            )
 
-                image_url = response.data[0].url
+            image_url = response.data[0].url
 
-                bot.send_photo(
-                    chat_id=chat_id,
-                    photo=image_url,
-                    caption=f"✅ Gambar berhasil dibuat!\n\nPrompt: {text[:180]}...",
-                    reply_to_message_id=message.message_id
-                )
-                bot.delete_message(chat_id, msg.message_id)
-
-            except Exception as e:
-                bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=msg.message_id,
-                    text=f"❌ Gagal generate gambar.\nError: {str(e)[:200]}"
-                )
+            bot.send_photo(
+                chat_id=chat_id,
+                photo=image_url,
+                caption=f"✅ Gambar berhasil dibuat!\n\nPrompt: {text[:180]}...",
+                reply_to_message_id=message.message_id
+            )
+            bot.delete_message(chat_id, msg.message_id)
             return
 
-        # CHAT BIASA + MEMORY
+        # --- CHAT BIASA + MEMORY ---
         user_histories[chat_id].append({"role": "user", "content": text})
         if len(user_histories[chat_id]) > 20:
             user_histories[chat_id] = user_histories[chat_id][-20:]
@@ -116,7 +112,7 @@ def handle_message(message):
         bot.reply_to(message, reply)
 
     except Exception as e:
-        bot.reply_to(message, f"❌ Terjadi error: {str(e)[:100]}")
+        bot.reply_to(message, f"❌ Error: {str(e)[:150]}")
 
-print("✅ Grok Bot V7.5 FULL (Memory + Direct Image Generation) sudah nyala!")
+print("✅ Grok Bot V7.7 Full Clean Version sudah nyala!")
 bot.infinity_polling()
